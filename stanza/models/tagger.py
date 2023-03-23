@@ -13,10 +13,12 @@ import time
 from datetime import datetime
 import argparse
 import logging
-import numpy as np
 import random
+
+import numpy as np
 import torch
 from torch import nn, optim
+from torch.optim.swa_utils import AveragedModel
 
 import stanza.models.pos.data as data
 from stanza.models.pos.data import DataLoader
@@ -221,6 +223,7 @@ def train(args):
     last_best_step = 0
     # start training
     train_loss = 0
+    swa_model = None
     while True:
         do_break = False
         for i, batch in enumerate(train_batch):
@@ -244,6 +247,10 @@ def train(args):
                 dev_preds = utils.unsort(dev_preds, dev_batch.data_orig_idx)
                 dev_batch.doc.set([UPOS, XPOS, FEATS], [y for x in dev_preds for y in x])
                 CoNLL.write_doc2conll(dev_batch.doc, system_pred_file)
+                # TODO: it is possible for the scorer to convert the
+                # conllu to the scorer's internal format without going
+                # through an intermediate file, which seems kinda lame
+                # to be honest
                 _, _, dev_score = scorer.score(system_pred_file, gold_file)
 
                 train_loss = train_loss / args['eval_interval'] # avg loss per batch
@@ -262,6 +269,8 @@ def train(args):
                     best_dev_preds = dev_preds
 
                 dev_score_history += [dev_score]
+                if swa_model is not None:
+                    swa_model.update_parameters(trainer.model)
 
             if global_step - last_best_step >= args['max_steps_before_stop']:
                 if not using_amsgrad:
@@ -275,6 +284,7 @@ def train(args):
                     if lr is None:
                         lr = args['lr']
                     trainer.optimizer = utils.get_optimizer(args['second_optim'], trainer.model.parameters(), lr=lr, betas=(.9, args['beta2']), eps=1e-6, weight_decay=args['second_weight_decay'])
+                    swa_model = AveragedModel(trainer.model)
                 else:
                     logger.info("Early termination: have not improved in {} steps".format(args['max_steps_before_stop']))
                     do_break = True
@@ -300,6 +310,22 @@ def train(args):
         logger.info("Dev set never evaluated.  Saving final model.")
         trainer.save(model_file)
 
+    if swa_model is not None:
+        # no idea if this is how the swa_model works
+        trainer.model = swa_model
+        dev_preds = []
+        for batch in dev_batch:
+            preds = trainer.predict(batch)
+            dev_preds += preds
+        dev_preds = utils.unsort(dev_preds, dev_batch.data_orig_idx)
+        dev_batch.doc.set([UPOS, XPOS, FEATS], [y for x in dev_preds for y in x])
+        CoNLL.write_doc2conll(dev_batch.doc, system_pred_file)
+        # TODO: it is possible for the scorer to convert the
+        # conllu to the scorer's internal format without going
+        # through an intermediate file, which seems kinda lame
+        # to be honest
+        _, _, dev_score = scorer.score(system_pred_file, gold_file)
+        logger.info("dev score of the swa_model: %.4f", dev_score)
 
 def evaluate(args):
     # file paths
