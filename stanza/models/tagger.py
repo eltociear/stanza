@@ -272,7 +272,10 @@ def train(args):
                 if swa_model is not None:
                     swa_model.update_parameters(trainer.model)
 
-            if global_step - last_best_step >= args['max_steps_before_stop']:
+            # here, we force switching for the last __ iterations so
+            # we use the SWA model with the alternate optimizer
+            if ((global_step - last_best_step >= args['max_steps_before_stop']) or
+                (not using_amsgrad and global_step + args['max_steps_before_stop'] >= args['max_steps'])):
                 if not using_amsgrad:
                     logger.info("Switching to second optimizer: {}".format(args['second_optim']))
                     if args['second_optim_reload']:
