@@ -312,7 +312,10 @@ def train(args):
 
     if swa_model is not None:
         # no idea if this is how the swa_model works
-        trainer.model = swa_model
+        for name, parameter in swa_model.named_parameters():
+            # swa_model will have all of the parameters under "module"
+            other_name = name.split(".", maxsplit=1)[-1]
+            trainer.model.get_parameter(other_name).data.copy_(parameter.data)
         dev_preds = []
         for batch in dev_batch:
             preds = trainer.predict(batch)
@@ -326,6 +329,9 @@ def train(args):
         # to be honest
         _, _, dev_score = scorer.score(system_pred_file, gold_file)
         logger.info("dev score of the swa_model: %.4f", dev_score)
+
+        swa_file = os.path.splitext(model_file)[0] + "_swa.pt"
+        trainer.save(swa_file)
 
 def evaluate(args):
     # file paths
