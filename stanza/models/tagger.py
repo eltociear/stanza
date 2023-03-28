@@ -267,6 +267,8 @@ def train(args):
                     trainer.save(model_file)
                     logger.info("new best model saved.")
                     best_dev_preds = dev_preds
+                    if swa_model is not None:
+                        swa_model = AveragedModel(trainer.model)
 
                 dev_score_history += [dev_score]
                 if swa_model is not None:
