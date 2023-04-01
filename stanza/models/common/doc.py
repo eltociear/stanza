@@ -1082,7 +1082,10 @@ class Word(StanzaObject):
         for parent in predecessors:
             deps = sorted(list(graph.get_edge_data(parent, self.id)))
             for dep in deps:
-                data.append("%d:%s" % (parent, dep))
+                if isinstance(parent, int):
+                    data.append("%d:%s" % (parent, dep))
+                else:
+                    data.append("%d.%d:%s" % (parent[0], parent[1], dep))
         if not data:
             return None
 
@@ -1105,7 +1108,11 @@ class Word(StanzaObject):
         if all(isinstance(x, str) for x in value):
             value = [x.split(":", maxsplit=1) for x in value]
         for parent, dep in value:
-            graph.add_edge(int(parent), self.id, dep)
+            if "." in parent:
+                parent = tuple(map(int, parent.split(".", maxsplit=1)))
+            else:
+                parent = int(parent)
+            graph.add_edge(parent, self.id, dep)
 
     @property
     def misc(self):
