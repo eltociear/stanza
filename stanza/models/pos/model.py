@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence, pack_sequence, pad_sequence, PackedSequence
 
+from peft import get_peft_model, LoraConfig, TaskType, PrefixTuningConfig
+
 from stanza.models.common.bert_embedding import extract_bert_embeddings
 from stanza.models.common.biaffine import BiaffineScorer
 from stanza.models.common.foundation_cache import load_bert, load_charlm
@@ -63,6 +65,9 @@ class Tagger(nn.Module):
         if self.args['bert_model']:
             bert_model, bert_tokenizer = load_bert(self.args['bert_model'], foundation_cache)
             input_size += bert_model.config.hidden_size
+            # peft_config = LoraConfig(task_type=TaskType.TOKEN_CLS, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
+            peft_config = PrefixTuningConfig(task_type=TaskType.TOKEN_CLS, inference_mode=False, num_virtual_tokens=args['prefix_tuning_virtual_tokens'])
+            bert_model = get_peft_model(bert_model, peft_config)
             if args.get('bert_hidden_layers', False):
                 # The average will be offset by 1/N so that the default zeros
                 # repressents an average of the N layers
@@ -75,7 +80,8 @@ class Tagger(nn.Module):
         else:
             bert_model = None
             bert_tokenizer = None
-        add_unsaved_module('bert_model', bert_model)
+        self.bert_model = bert_model
+        #add_unsaved_module('bert_model', bert_model)
         add_unsaved_module('bert_tokenizer', bert_tokenizer)
 
         if self.args['pretrain']:
@@ -131,7 +137,7 @@ class Tagger(nn.Module):
     def log_norms(self):
         lines = ["NORMS FOR MODEL PARAMTERS"]
         for name, param in self.named_parameters():
-            if param.requires_grad and name.split(".")[0] not in ('bert_model', 'charmodel_forward', 'charmodel_backward'):
+            if param.requires_grad and name.split(".")[0] not in ('charmodel_forward', 'charmodel_backward'):
                 lines.append("  %s %.6g" % (name, torch.norm(param).item()))
         logger.info("\n".join(lines))
 
@@ -170,7 +176,8 @@ class Tagger(nn.Module):
         if self.bert_model is not None:
             device = next(self.parameters()).device
             processed_bert = extract_bert_embeddings(self.args['bert_model'], self.bert_tokenizer, self.bert_model, text, device, keep_endpoints=False,
-                                                     num_layers=self.bert_layer_mix.in_features if self.bert_layer_mix is not None else None)
+                                                     num_layers=self.bert_layer_mix.in_features if self.bert_layer_mix is not None else None,
+                                                     detach=False)   # TODO: only do this for peft
 
             if self.bert_layer_mix is not None:
                 # add the average so that the default behavior is to
