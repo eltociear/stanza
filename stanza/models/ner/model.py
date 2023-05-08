@@ -67,10 +67,19 @@ class NERTagger(nn.Module):
 
             input_size += self.args['word_emb_dim']
 
+        # TODO: this, pos, depparse should all be refactored
+        # FIXME: possibly this, pos, and depparse are all losing a finetuned transformer if loaded & saved
         if self.args.get('bert_model', None):
-            bert_model, bert_tokenizer = load_bert(self.args['bert_model'], foundation_cache)
-            add_unsaved_module('bert_model', bert_model)
-            add_unsaved_module('bert_tokenizer', bert_tokenizer)
+            if self.args.get('bert_finetune', False):
+                bert_model, bert_tokenizer = load_bert(self.args['bert_model'])
+                self.bert_model = bert_model
+                add_unsaved_module('bert_tokenizer', bert_tokenizer)
+            else:
+                bert_model, bert_tokenizer = load_bert(self.args['bert_model'], foundation_cache)
+                for n, p in bert_model.named_parameters():
+                    p.requires_grad = False
+                add_unsaved_module('bert_model', bert_model)
+                add_unsaved_module('bert_tokenizer', bert_tokenizer)
             input_size += self.bert_model.config.hidden_size
         else:
             self.bert_model = None
@@ -174,7 +183,8 @@ class NERTagger(nn.Module):
 
         if self.bert_model is not None:
             device = next(self.parameters()).device
-            processed_bert = extract_bert_embeddings(self.args['bert_model'], self.bert_tokenizer, self.bert_model, sentences, device, keep_endpoints=False)
+            processed_bert = extract_bert_embeddings(self.args['bert_model'], self.bert_tokenizer, self.bert_model, sentences, device, keep_endpoints=False,
+                                                     detach=not self.args.get('bert_finetune', False))
             processed_bert = pad_sequence(processed_bert, batch_first=True)
             inputs += [pack(processed_bert)]
 
