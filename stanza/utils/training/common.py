@@ -204,6 +204,13 @@ BERT = {
     # Musixmatch/umberto-commoncrawl-cased-v1:             98.56   98.45   98.13   97.62
     "it": "dbmdz/electra-base-italian-xxl-cased-discriminator",
 
+    # could also try:
+    # l3cube-pune/marathi-bert-v2
+    #  or
+    # https://huggingface.co/l3cube-pune/hindi-marathi-dev-roberta
+    # l3cube-pune/hindi-marathi-dev-roberta
+    "mr": "l3cube-pune/marathi-roberta",
+
     # experiments on the cintil conparse dataset
     # ran a variety of transformer settings
     # found the following dev set scores after 400 iterations:
