@@ -284,18 +284,25 @@ def build_optimizer(args, model, build_simple_adadelta=False):
         raise ValueError("Unknown optimizer: %s" % optim)
     return optimizer
 
-def build_scheduler(args, optimizer):
-    if args.get('learning_rate_warmup', 0) <= 0:
-        # TODO: is there an easier way to make an empty scheduler?
-        lr_lambda = lambda x: 1.0
-    else:
-        warmup_end = args['learning_rate_warmup']
-        def lr_lambda(x):
-            if x >= warmup_end:
-                return 1.0
-            return x / warmup_end
+def build_scheduler(args, optimizer, first_optimizer=False):
+    #if args.get('learning_rate_warmup', 0) <= 0:
+    #    # TODO: is there an easier way to make an empty scheduler?
+    #    lr_lambda = lambda x: 1.0
+    #else:
+    #    warmup_end = args['learning_rate_warmup']
+    #    def lr_lambda(x):
+    #        if x >= warmup_end:
+    #            return 1.0
+    #        return x / warmup_end
 
-    scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    #scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+    # TODO: turn this into args
+    # especially the factor & patience
+    if first_optimizer:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.6, patience=5, min_lr=0.02)
+    else:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.8, patience=20)
     return scheduler
 
 def initialize_linear(linear, nonlinearity, bias):
